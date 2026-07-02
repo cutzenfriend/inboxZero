@@ -1,0 +1,13 @@
+services:
+  inboxzero:
+    build: .
+    container_name: inboxzero
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      TZ: Europe/Berlin
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
