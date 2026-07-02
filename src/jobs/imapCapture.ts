@@ -25,6 +25,9 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
     logger: false,
   });
 
+  // Gmail drops idle connections; without a listener an 'error' event would crash the process
+  client.on("error", (err) => console.error("[imap] connection error:", err.message));
+
   await client.connect();
   try {
     await client.mailboxCreate(CAPTURED_FOLDER).catch(() => {}); // may already exist

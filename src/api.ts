@@ -64,7 +64,13 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
     if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
 
     // tolerate data URL prefix (data:image/png;base64,…)
-    const image = body.image ? body.image.replace(/^data:image\/\w+;base64,/, "") : null;
+    const image = body.image ? body.image.replace(/^data:image\/\w+;base64,/, "").replace(/\s/g, "") : null;
+    if (image && !/^[A-Za-z0-9+/]+={0,2}$/.test(image)) {
+      return c.json(
+        { error: "image is not valid base64 — send the output of a Base64 Encode action, not the raw image" },
+        400,
+      );
+    }
 
     let structured;
     try {

@@ -109,7 +109,10 @@ export class Llm {
       }),
       signal: AbortSignal.timeout(120_000),
     });
-    if (!res.ok) throw new Error(`Ollama /api/chat: HTTP ${res.status}`);
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`Ollama /api/chat: HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
+    }
 
     const data = (await res.json()) as { message?: { content?: string } };
     const raw = data.message?.content;
