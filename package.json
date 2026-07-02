@@ -1,0 +1,41 @@
+{
+  "name": "inboxzero",
+  "version": "0.1.0",
+  "description": "Gmail-Posteingang als Todo-Liste: Todos landen zum richtigen Zeitpunkt als Mail im Posteingang",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.6",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.12.27",
+    "imapflow": "^1.4.3",
+    "mailparser": "^3.9.12",
+    "node-cron": "^4.5.0",
+    "node-ical": "^0.26.1",
+    "nodemailer": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^26.1.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.1": true
+  }
+}

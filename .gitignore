@@ -1,0 +1,23 @@
+# Env & Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies & Build
+node_modules/
+dist/
+
+# Data
+data/
+*.sqlite
+*.sqlite-*
+*.db
+
+# AI tooling
+.claude/
+.claude*
+CLAUDE.md
+CLAUDE.local.md
+
+# OS
+.DS_Store
