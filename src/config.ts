@@ -1,6 +1,6 @@
 function required(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`Fehlende Env-Variable: ${name}`);
+  if (!value) throw new Error(`Missing env variable: ${name}`);
   return value;
 }
 
@@ -14,18 +14,21 @@ export const config = {
 
   gmailUser: required("GMAIL_USER"),
   gmailAppPassword: required("GMAIL_APP_PASSWORD"),
-  /** Plus-Adresse, deren Auftauchen im To-Header eine Mail als Erfassung markiert */
+  /** Plus address; its presence in the To header marks a mail as capture */
   captureAddress: optional("CAPTURE_ADDRESS", "").toLowerCase(),
 
   apiToken: required("API_TOKEN"),
   uiUser: required("UI_USER"),
   uiPassword: required("UI_PASSWORD"),
 
-  ollamaUrl: optional("OLLAMA_URL", "http://192.168.178.250:11434").replace(/\/$/, ""),
+  ollamaUrl: optional("OLLAMA_URL", "http://localhost:11434").replace(/\/$/, ""),
   icsUrl: optional("ICS_URL", ""),
 
+  /** Language the LLM writes todo titles/notes in; seeds the setting, changeable in the web UI */
+  llmLanguage: optional("LLM_LANGUAGE", "English"),
+
   defaultLeadDays: Number(optional("DEFAULT_LEAD_DAYS", "2")),
-  /** Öffentliche Basis-URL des Service für Links in gesendeten Mails */
+  /** Public base URL of this service, used for links in surfaced mails */
   baseUrl: optional("BASE_URL", "").replace(/\/$/, ""),
 };
 export type Config = typeof config;

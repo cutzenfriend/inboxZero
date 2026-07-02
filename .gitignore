@@ -1,7 +1,7 @@
 # Env & Secrets
 .env
 .env.*
-!.env.example
+docker-compose.override.yml
 
 # Dependencies & Build
 node_modules/

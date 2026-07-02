@@ -27,7 +27,7 @@ const STYLE = `
 
 function page(title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>) {
   return html`<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -40,16 +40,10 @@ function page(title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
 </head>
 <body>
   <h1><a href="/">📥 inboxZero</a></h1>
-  <nav><a href="/">Liste</a> <a href="/new">+ Neu</a> <a href="/settings">Einstellungen</a></nav>
+  <nav><a href="/">List</a> <a href="/new">+ New</a> <a href="/settings">Settings</a></nav>
   ${body}
 </body>
 </html>`;
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 function todoRow(t: Todo) {
@@ -59,10 +53,10 @@ function todoRow(t: Todo) {
       ${t.url ? html`<br /><a class="muted" href="${t.url}">${t.url}</a>` : ""}
       ${t.notes ? html`<br /><span class="muted">${t.notes}</span>` : ""}
     </td>
-    <td class="muted">fällig ${fmtDate(t.due_date)}<br />📥 ${fmtDate(t.surface_date)}</td>
-    <td class="muted">${t.status === "sent" ? "gesendet" : t.status === "cancelled" ? "storniert" : t.source}</td>
+    <td class="muted">due ${t.due_date ?? "—"}<br />📥 ${t.surface_date}</td>
+    <td class="muted">${t.status === "scheduled" ? t.source : t.status}</td>
     <td>
-      <form class="inline" method="post" action="/todos/${t.id}/delete" onsubmit="return confirm('Löschen?')">
+      <form class="inline" method="post" action="/todos/${t.id}/delete" onsubmit="return confirm('Delete?')">
         <button class="small" type="submit">✕</button>
       </form>
     </td>
@@ -72,13 +66,13 @@ function todoRow(t: Todo) {
 export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
   const ui = new Hono();
 
-  // Basic Auth für alles außer Manifest/Icon (iOS lädt die ohne Credentials)
+  // Basic auth for everything except manifest/icon (iOS fetches those without credentials)
   ui.use("*", async (c, next) => {
     if (c.req.path === "/manifest.webmanifest" || c.req.path === "/icon.png") return next();
     const header = c.req.header("Authorization") ?? "";
     const expected = "Basic " + Buffer.from(`${config.uiUser}:${config.uiPassword}`).toString("base64");
     if (header !== expected) {
-      return c.text("Authentifizierung erforderlich", 401, { "WWW-Authenticate": 'Basic realm="inboxZero"' });
+      return c.text("Authentication required", 401, { "WWW-Authenticate": 'Basic realm="inboxZero"' });
     }
     await next();
   });
@@ -107,12 +101,12 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const rest = todos.filter((t) => t.status !== "scheduled").slice(0, 20);
     return c.html(
       page(
-        "Liste",
+        "List",
         html`
-          <h2>Geplant (${scheduled.length})</h2>
+          <h2>Scheduled (${scheduled.length})</h2>
           <table>${scheduled.map(todoRow)}</table>
-          ${scheduled.length === 0 ? html`<p class="muted">Nichts geplant.</p>` : ""}
-          <h2>Erledigt / storniert</h2>
+          ${scheduled.length === 0 ? html`<p class="muted">Nothing scheduled.</p>` : ""}
+          <h2>Sent / cancelled</h2>
           <table>${rest.map(todoRow)}</table>
         `,
       ),
@@ -124,7 +118,7 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     return c.redirect("/");
   });
 
-  ui.get("/new", (c) => c.html(page("Neu", newForm(null, null))));
+  ui.get("/new", (c) => c.html(page("New", newForm(null, null))));
 
   ui.post("/new", async (c) => {
     const form = await c.req.formData();
@@ -138,7 +132,7 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     if (imageFile instanceof File && imageFile.size > 0) {
       imageBase64 = Buffer.from(await imageFile.arrayBuffer()).toString("base64");
     }
-    if (!text && !imageBase64) return c.html(page("Neu", newForm("Bitte Text eingeben oder Bild wählen.", null)));
+    if (!text && !imageBase64) return c.html(page("New", newForm("Please enter text or choose an image.", null)));
 
     try {
       const structured = await llm.structureTodo(text || null, imageBase64);
@@ -150,10 +144,10 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
         leadDays: leadDays ?? structured.leadDays,
       }, "api");
       return c.html(
-        page("Neu", newForm(null, `Erfasst: „${todo.title}" — landet am ${fmtDate(todo.surface_date)} im Posteingang.`)),
+        page("New", newForm(null, `Captured: "${todo.title}" — will land in your inbox on ${todo.surface_date}.`)),
       );
     } catch (err) {
-      return c.html(page("Neu", newForm(`Ollama-Fehler: ${err instanceof Error ? err.message : err}`, null)));
+      return c.html(page("New", newForm(`Ollama error: ${err instanceof Error ? err.message : err}`, null)));
     }
   });
 
@@ -165,20 +159,21 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     } catch (err) {
       modelError = err instanceof Error ? err.message : String(err);
     }
-    return c.html(page("Einstellungen", settingsForm(store, models, modelError, false)));
+    return c.html(page("Settings", settingsForm(store, models, modelError, false)));
   });
 
   ui.post("/settings", async (c) => {
     const form = await c.req.formData();
     store.setSetting("llm_system_prompt", String(form.get("systemPrompt") ?? ""));
     store.setSetting("llm_model", String(form.get("model") ?? ""));
+    store.setSetting("llm_language", String(form.get("language") ?? "").trim() || "English");
     let models: ModelInfo[] = [];
     try {
       models = await llm.listModels();
     } catch {
-      /* Dropdown bleibt leer, gespeicherter Wert bleibt erhalten */
+      /* dropdown stays empty, the stored value is kept */
     }
-    return c.html(page("Einstellungen", settingsForm(store, models, null, true)));
+    return c.html(page("Settings", settingsForm(store, models, null, true)));
   });
 
   return ui;
@@ -189,15 +184,15 @@ function newForm(error: string | null, ok: string | null) {
     ${error ? html`<p class="error">${error}</p>` : ""}
     ${ok ? html`<p class="ok">${ok}</p>` : ""}
     <form method="post" action="/new" enctype="multipart/form-data">
-      <label>Was ist zu tun? (Freitext — Datum & Details erkennt das LLM)</label>
-      <textarea name="text" rows="4" placeholder="z.B. Reifen wechseln bis Ende Oktober, erinner mich 5 Tage vorher"></textarea>
-      <label>… oder Bild (Screenshot etc. — wird nur ausgewertet, nicht gespeichert)</label>
+      <label>What needs to be done? (free-form — the LLM extracts date & details)</label>
+      <textarea name="text" rows="4" placeholder="e.g. Change tires by end of October, remind me 5 days before"></textarea>
+      <label>… or an image (screenshot etc. — analyzed only, not stored)</label>
       <input type="file" name="image" accept="image/*" />
-      <label>Fälligkeit überschreiben (optional)</label>
+      <label>Override due date (optional)</label>
       <input type="date" name="due" />
-      <label>Vorlauftage (optional)</label>
-      <input type="number" name="leadDays" min="0" placeholder="Standard: aus Env" />
-      <button type="submit">Erfassen</button>
+      <label>Lead days (optional)</label>
+      <input type="number" name="leadDays" min="0" placeholder="default: from env" />
+      <button type="submit">Capture</button>
     </form>
   `;
 }
@@ -205,23 +200,26 @@ function newForm(error: string | null, ok: string | null) {
 function settingsForm(store: Store, models: ModelInfo[], modelError: string | null, saved: boolean) {
   const currentModel = store.getSetting("llm_model");
   const prompt = store.getSetting("llm_system_prompt");
+  const language = store.getSetting("llm_language");
   return html`
-    ${saved ? html`<p class="ok">Gespeichert.</p>` : ""}
-    ${modelError ? html`<p class="error">Ollama nicht erreichbar: ${modelError}</p>` : ""}
+    ${saved ? html`<p class="ok">Saved.</p>` : ""}
+    ${modelError ? html`<p class="error">Ollama unreachable: ${modelError}</p>` : ""}
     <form method="post" action="/settings">
-      <label>Ollama-Modell (👁 = kann Bilder; bei Bild-Erfassung wird sonst automatisch ausgewichen)</label>
+      <label>Ollama model (👁 = supports images; image captures fall back to a vision model automatically)</label>
       <select name="model">
-        <option value="">(erstes verfügbares Modell)</option>
+        <option value="">(first available model)</option>
         ${models.map(
           (m) => html`<option value="${m.name}" ${m.name === currentModel ? "selected" : ""}>${m.name}${m.vision ? " 👁" : ""}</option>`,
         )}
         ${currentModel && !models.some((m) => m.name === currentModel)
-          ? html`<option value="${currentModel}" selected>${currentModel} (nicht in Liste)</option>`
+          ? html`<option value="${currentModel}" selected>${currentModel} (not in list)</option>`
           : ""}
       </select>
-      <label>System-Prompt (Platzhalter: {today})</label>
+      <label>Todo language (what the LLM writes titles/notes in, e.g. "English", "German")</label>
+      <input type="text" name="language" value="${language}" />
+      <label>System prompt (placeholders: {today}, {language})</label>
       <textarea name="systemPrompt" rows="12">${prompt}</textarea>
-      <button type="submit">Speichern</button>
+      <button type="submit">Save</button>
     </form>
   `;
 }

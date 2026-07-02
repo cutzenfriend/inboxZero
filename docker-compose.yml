@@ -1,3 +1,5 @@
+# Copy real values into a git-ignored docker-compose.override.yml (see README) —
+# never commit credentials to this file.
 services:
   inboxzero:
     build: .
@@ -5,9 +7,34 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file: .env
     environment:
       TZ: Europe/Berlin
       DATA_DIR: /app/data
+
+      # Gmail (app password: https://myaccount.google.com/apppasswords, requires 2FA)
+      GMAIL_USER: you@example.com
+      GMAIL_APP_PASSWORD: change-me
+
+      # Mails to this plus address are captured as todos
+      CAPTURE_ADDRESS: you+todo@example.com
+
+      # Auth
+      API_TOKEN: change-me-long-random-token
+      UI_USER: admin
+      UI_PASSWORD: change-me
+
+      # Ollama
+      OLLAMA_URL: http://localhost:11434
+      # Language the LLM writes todos in (default for the settings page)
+      LLM_LANGUAGE: English
+
+      # Secret iCal address of your calendar (optional)
+      ICS_URL: ""
+
+      # Lead days when none are given
+      DEFAULT_LEAD_DAYS: 2
+
+      # Public URL of this service (used for links in surfaced mails), optional
+      BASE_URL: ""
     volumes:
       - ./data:/app/data

@@ -8,10 +8,10 @@ const MARKER = "#todo";
 const LEAD_TOKEN = /\b(\d{1,3})d\b/;
 
 /**
- * Holt die geheime ICS-URL und übernimmt Termine mit "#todo" im Titel als Todos.
- * Vorlauf optional per "Nd"-Token im Titel (z.B. "#todo 5d Steuer").
- * Dedupe/Update per "uid:datum" (so erzeugt jede Wiederholung ein eigenes Todo);
- * verschwundene, noch nicht gesendete Einträge werden storniert.
+ * Fetches the secret ICS URL and turns events with "#todo" in the title into todos.
+ * Lead time optional via an "Nd" token in the title (e.g. "#todo 5d taxes").
+ * Dedupe/update via "uid:date" (so every recurrence creates its own todo);
+ * vanished, not-yet-sent entries are cancelled.
  */
 export async function syncCalendar(store: Store, config: Config): Promise<void> {
   if (!config.icsUrl) return;
@@ -26,7 +26,7 @@ export async function syncCalendar(store: Store, config: Config): Promise<void> 
     const summary = String(item.summary ?? "");
     if (!summary.toLowerCase().includes(MARKER)) continue;
 
-    // Nächstes Vorkommen bestimmen (RRULE: nächster Termin ab jetzt, heute inklusive)
+    // determine the next occurrence (RRULE: next event from now, today inclusive)
     let start: Date | undefined;
     if (item.rrule) {
       const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -57,18 +57,18 @@ export async function syncCalendar(store: Store, config: Config): Promise<void> 
           lead_days: leadDays,
           surface_date: computeSurfaceDate(due, leadDays ?? config.defaultLeadDays, now),
         });
-        console.log(`[calendar] aktualisiert: #${existing.id} „${title}"`);
+        console.log(`[calendar] updated: #${existing.id} "${title}"`);
       }
       continue;
     }
 
-    // Vergangene Einzeltermine nicht mehr neu anlegen
+    // do not re-create past one-off events
     if (due < toIsoDate(now)) continue;
 
     const todo = createTodo(store, config, { title, due, leadDays, notes: item.description ? String(item.description) : null }, "calendar", ref);
-    console.log(`[calendar] erfasst: #${todo.id} „${todo.title}" (📥 ${todo.surface_date})`);
+    console.log(`[calendar] captured: #${todo.id} "${todo.title}" (inbox on ${todo.surface_date})`);
   }
 
   const cancelled = store.cancelCalendarTodosNotIn(activeRefs);
-  if (cancelled > 0) console.log(`[calendar] ${cancelled} Todo(s) storniert (Termin entfernt)`);
+  if (cancelled > 0) console.log(`[calendar] cancelled ${cancelled} todo(s) (event removed)`);
 }

@@ -13,7 +13,7 @@ const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     title: { type: "string" },
-    due: { type: ["string", "null"], description: "YYYY-MM-DD oder null" },
+    due: { type: ["string", "null"], description: "YYYY-MM-DD or null" },
     leadDays: { type: ["integer", "null"] },
     notes: { type: ["string", "null"] },
   },
@@ -62,36 +62,37 @@ export class Llm {
     );
   }
 
-  /** Konfiguriertes Modell; bei Bild-Eingaben automatisch ein Vision-fähiges, falls nötig. */
+  /** Configured model; automatically falls back to a vision-capable one for image inputs. */
   private async resolveModel(needVision: boolean): Promise<string> {
     const configured = this.store.getSetting("llm_model");
     if (configured && (!needVision || (await this.capabilities(configured)).includes("vision"))) {
       return configured;
     }
     const models = await this.listModels();
-    if (!models.length) throw new Error("Ollama hat keine Modelle installiert");
+    if (!models.length) throw new Error("No models installed in Ollama");
     if (!needVision) return configured || models[0]!.name;
 
     const visionModel = models.find((m) => m.vision);
-    if (!visionModel) throw new Error("Kein Vision-fähiges Modell in Ollama installiert (z.B. gemma4)");
-    if (configured) console.log(`[llm] „${configured}" kann keine Bilder — nutze „${visionModel.name}"`);
+    if (!visionModel) throw new Error("No vision-capable model installed in Ollama");
+    if (configured) console.log(`[llm] "${configured}" cannot handle images — using "${visionModel.name}"`);
     return visionModel.name;
   }
 
   /**
-   * Strukturiert Freitext und/oder ein Bild (base64, z.B. Chat-Screenshot) zu einem Todo.
-   * Bilder erfordern ein multimodales Modell (z.B. gemma4). Wirft bei Nichterreichbarkeit/kaputter Antwort.
+   * Structures free-form text and/or an image (base64, e.g. a chat screenshot) into a todo.
+   * Images require a multimodal model. Throws if Ollama is unreachable or returns a broken response.
    */
   async structureTodo(text?: string | null, imageBase64?: string | null): Promise<StructuredTodo> {
-    if (!text?.trim() && !imageBase64) throw new Error("Weder Text noch Bild übergeben");
+    if (!text?.trim() && !imageBase64) throw new Error("Neither text nor image provided");
     const model = await this.resolveModel(!!imageBase64);
     const systemPrompt = this.store
       .getSetting("llm_system_prompt")
-      .replaceAll("{today}", toIsoDate(new Date()));
+      .replaceAll("{today}", toIsoDate(new Date()))
+      .replaceAll("{language}", this.store.getSetting("llm_language") || "English");
 
     const userContent =
       text?.trim() ||
-      "Extrahiere die Aufgabe aus dem angehängten Bild (z.B. Screenshot einer Chat-Nachricht oder eines Dokuments).";
+      "Extract the task from the attached image (e.g. a screenshot of a chat message or document).";
 
     const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: "POST",
@@ -112,15 +113,15 @@ export class Llm {
 
     const data = (await res.json()) as { message?: { content?: string } };
     const raw = data.message?.content;
-    if (!raw) throw new Error("Ollama lieferte keine Antwort");
+    if (!raw) throw new Error("Ollama returned no answer");
 
     let parsed: Partial<StructuredTodo>;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      throw new Error(`Ollama lieferte kein valides JSON: ${raw.slice(0, 200)}`);
+      throw new Error(`Ollama returned invalid JSON: ${raw.slice(0, 200)}`);
     }
-    if (!parsed.title?.trim()) throw new Error("Ollama lieferte keinen Titel");
+    if (!parsed.title?.trim()) throw new Error("Ollama returned no title");
 
     const due = typeof parsed.due === "string" && ISO_DATE.test(parsed.due) ? parsed.due : null;
     const leadDays =
@@ -133,7 +134,7 @@ export class Llm {
       due,
       leadDays,
       notes: typeof parsed.notes === "string" && parsed.notes.trim() ? parsed.notes.trim() : null,
-      // URLs übernehmen wir deterministisch aus dem Originaltext, nicht vom LLM
+      // URLs are taken deterministically from the original text, not from the LLM
       url: text ? URL_PATTERN.exec(text)?.[0] ?? null : null,
     };
   }

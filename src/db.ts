@@ -31,15 +31,15 @@ export interface NewTodo {
   sourceRef?: string | null;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `Du bist ein Assistent, der Freitext oder Bilder (z.B. Chat-Screenshots) in ein Todo umwandelt.
-Heute ist {today}. Extrahiere aus der Eingabe:
-- title: kurzer, prägnanter Aufgabentitel (Imperativ, deutsch); wichtige Details wie Mengen- oder Ortsangaben gehören mit hinein (z.B. "3 Bananen kaufen")
-- due: Fälligkeitsdatum als YYYY-MM-DD, falls eines genannt oder ableitbar ist ("nächsten Dienstag", "Ende März", "in 2 Wochen"), sonst null
-- leadDays: Vorlauftage, falls genannt ("erinner mich 3 Tage vorher"), sonst null
-- notes: relevante Details/Links aus dem Text, sonst null
-Antworte ausschließlich mit dem JSON-Objekt.`;
+const DEFAULT_SYSTEM_PROMPT = `You are an assistant that converts free-form text or images (e.g. chat screenshots) into a todo.
+Today is {today}. Extract from the input:
+- title: short, concise task title (imperative, written in {language}); always keep details like quantities and places in the title ("Buy 3 bananas", never just "Buy bananas")
+- due: due date as YYYY-MM-DD if one is mentioned or can be inferred ("next Tuesday", "end of March", "in 2 weeks"), otherwise null
+- leadDays: lead time in days if mentioned ("remind me 3 days before"), otherwise null
+- notes: relevant details/links from the input, otherwise null
+Respond with the JSON object only.`;
 
-export function openDb(dataDir: string): Database.Database {
+export function openDb(dataDir: string, defaultLanguage: string): Database.Database {
   mkdirSync(dataDir, { recursive: true });
   const db = new Database(join(dataDir, "inboxzero.sqlite"));
   db.pragma("journal_mode = WAL");
@@ -70,6 +70,7 @@ export function openDb(dataDir: string): Database.Database {
 
   db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('llm_system_prompt', ?)").run(DEFAULT_SYSTEM_PROMPT);
   db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('llm_model', '')").run();
+  db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('llm_language', ?)").run(defaultLanguage);
 
   return db;
 }
@@ -119,7 +120,7 @@ export class Store {
       .all() as Todo[];
   }
 
-  /** Fällige, noch nicht gesendete Todos (surface_date <= heute). */
+  /** Due, not-yet-sent todos (surface_date <= today). */
   listDue(todayIso: string): Todo[] {
     return this.db
       .prepare("SELECT * FROM todos WHERE status = 'scheduled' AND surface_date <= ?")
@@ -147,7 +148,7 @@ export class Store {
     return this.db.prepare("DELETE FROM todos WHERE id = ?").run(id).changes > 0;
   }
 
-  /** Cancelt Kalender-Todos, deren iCal-UID nicht mehr im Feed ist. */
+  /** Cancels calendar todos whose iCal UID is no longer in the feed. */
   cancelCalendarTodosNotIn(activeUids: string[]): number {
     const rows = this.db
       .prepare("SELECT id, source_ref FROM todos WHERE source='calendar' AND status='scheduled'")

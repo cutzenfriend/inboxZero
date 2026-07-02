@@ -11,7 +11,7 @@ import { surfaceDueTodos } from "./jobs/surface.js";
 import { captureFromImap } from "./jobs/imapCapture.js";
 import { syncCalendar } from "./jobs/calendarSync.js";
 
-const db = openDb(config.dataDir);
+const db = openDb(config.dataDir, config.llmLanguage);
 const store = new Store(db);
 const llm = new Llm(config.ollamaUrl, store);
 const mailer = createMailer(config);
@@ -20,7 +20,7 @@ const app = new Hono();
 app.route("/api", apiRoutes(store, config, llm));
 app.route("/", uiRoutes(store, config, llm));
 
-// Jobs — mit Überlappungsschutz
+// jobs — guarded against overlapping runs
 function guarded(name: string, fn: () => Promise<void>): () => void {
   let running = false;
   return () => {
@@ -37,12 +37,12 @@ const runImap = guarded("imap", () => captureFromImap(store, config, llm));
 const runCalendar = guarded("calendar", () => syncCalendar(store, config));
 
 cron.schedule("*/5 * * * *", runSurface);
-cron.schedule("2-59/5 * * * *", runImap); // versetzt, damit Erfassung vor dem nächsten Surface-Tick liegt
+cron.schedule("2-59/5 * * * *", runImap); // offset so captures land before the next surface tick
 cron.schedule("7 * * * *", runCalendar);
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`inboxZero läuft auf http://localhost:${info.port} (Ollama: ${config.ollamaUrl})`);
-  // Startup-Ticks
+  console.log(`inboxZero listening on http://localhost:${info.port} (Ollama: ${config.ollamaUrl})`);
+  // startup ticks
   runCalendar();
   runImap();
   runSurface();

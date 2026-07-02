@@ -6,15 +6,15 @@ import type { Llm } from "../llm.js";
 import { createTodo } from "../api.js";
 import { parseSubject } from "../parse.js";
 
-const CAPTURED_FOLDER = "inboxZero/erfasst";
+const CAPTURED_FOLDER = "inboxZero/captured";
 const LOOKBACK_DAYS = 14;
 
 /**
- * Durchsucht den Posteingang nach Erfassungs-Mails:
- *  - To enthält die Capture-Adresse (z.B. name+todo@…), Betreff/Body frei (Grammatik, sonst LLM)
- *  - oder Mail von sich selbst mit @-Datums-Betreff (Grammatik-Fast-Path)
- * Erfolgreich erfasste Mails wandern in den Ordner "inboxZero/erfasst".
- * Bei LLM-Fehlern bleibt die Mail im Posteingang (nächster Tick versucht es erneut).
+ * Scans the inbox for capture mails:
+ *  - To contains the capture address (e.g. name+todo@…), subject/body free-form (grammar fast path, LLM otherwise)
+ *  - or a self-sent mail with an @-date subject (grammar fast path)
+ * Successfully captured mails are moved to the "inboxZero/captured" folder.
+ * On LLM errors the mail stays in the inbox (the next tick retries).
  */
 export async function captureFromImap(store: Store, config: Config, llm: Llm): Promise<void> {
   const client = new ImapFlow({
@@ -27,7 +27,7 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
 
   await client.connect();
   try {
-    await client.mailboxCreate(CAPTURED_FOLDER).catch(() => {}); // existiert ggf. schon
+    await client.mailboxCreate(CAPTURED_FOLDER).catch(() => {}); // may already exist
 
     const lock = await client.getMailboxLock("INBOX");
     const toCapture: { uid: number; messageId: string; subject: string; source: Buffer }[] = [];
@@ -61,7 +61,7 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
     }
 
     for (const mail of toCapture) {
-      // Schon erfasst (z.B. Move beim letzten Lauf gescheitert) → nur noch wegräumen
+      // already captured (e.g. move failed on the last run) → just tidy up
       if (!store.findBySourceRef("email", mail.messageId)) {
         const grammar = parseSubject(mail.subject, new Date());
         const parsed = await simpleParser(mail.source);
@@ -78,7 +78,7 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
           };
         } else {
           try {
-            // Erster Bild-Anhang (z.B. geteilter Screenshot) geht mit ans multimodale Modell
+            // first image attachment (e.g. a shared screenshot) goes to the multimodal model
             const imageAttachment = parsed.attachments.find((a) => a.contentType?.startsWith("image/"));
             const imageBase64 = imageAttachment ? imageAttachment.content.toString("base64") : null;
             const structured = await llm.structureTodo(
@@ -87,13 +87,13 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
             );
             input = { title: structured.title, due: structured.due, leadDays: structured.leadDays, notes: structured.notes, url: structured.url };
           } catch (err) {
-            console.error(`[imap] LLM-Fehler für „${mail.subject}" — Mail bleibt im Posteingang:`, err);
+            console.error(`[imap] LLM error for "${mail.subject}" — mail stays in inbox:`, err);
             continue;
           }
         }
 
         const todo = createTodo(store, config, input, "email", mail.messageId);
-        console.log(`[imap] erfasst: #${todo.id} „${todo.title}" (📥 ${todo.surface_date})`);
+        console.log(`[imap] captured: #${todo.id} "${todo.title}" (inbox on ${todo.surface_date})`);
       }
 
       await client.messageMove(String(mail.uid), CAPTURED_FOLDER, { uid: true });

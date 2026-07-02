@@ -1,15 +1,15 @@
 /**
- * Deterministischer Fast-Path für die Betreff-Grammatik:
- *   @<TT.MM.[JJJJ]> [<N>d] <Titel>   z.B. "@01.03. 5d Steuererklärung"
- *   @<JJJJ-MM-TT>   [<N>d] <Titel>   z.B. "@2026-03-01 Steuererklärung"
- * Matcht die Grammatik nicht, liefert parseSubject null → Aufrufer nutzt das LLM.
+ * Deterministic fast path for the subject grammar:
+ *   @<DD.MM.[YYYY]> [<N>d] <title>   e.g. "@01.03. 5d file tax return"
+ *   @<YYYY-MM-DD>   [<N>d] <title>   e.g. "@2026-03-01 file tax return"
+ * If the grammar does not match, parseSubject returns null → the caller uses the LLM.
  */
 
 export interface ParsedTodo {
   title: string;
-  /** Fälligkeit als YYYY-MM-DD */
+  /** due date as YYYY-MM-DD */
   due: string;
-  /** Vorlauftage; null = Default verwenden */
+  /** lead days; null = use default */
   leadDays: number | null;
 }
 
@@ -21,7 +21,7 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** Lokales Datum als YYYY-MM-DD (kein UTC-Versatz). */
+/** Local date as YYYY-MM-DD (no UTC offset). */
 export function toIsoDate(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -32,8 +32,8 @@ function isValidDate(year: number, month: number, day: number): boolean {
 }
 
 /**
- * Parst einen Betreff nach der @-Grammatik. `today` bestimmt das Jahr
- * bei jahrlosen Datumsangaben: nächstes Vorkommen (heute zählt als zukünftig).
+ * Parses a subject against the @ grammar. `today` determines the year for
+ * year-less dates: next occurrence (today counts as upcoming).
  */
 export function parseSubject(subject: string, today: Date): ParsedTodo | null {
   let match = ISO_DATE.exec(subject);
@@ -80,8 +80,8 @@ export function parseSubject(subject: string, today: Date): ParsedTodo | null {
 }
 
 /**
- * surface_date = due − leadDays. Liegt das Ergebnis in der Vergangenheit,
- * gibt es das heutige Datum zurück (→ sofort senden).
+ * surface_date = due − leadDays. If the result lies in the past,
+ * today's date is returned (→ send immediately).
  */
 export function computeSurfaceDate(due: string, leadDays: number, today: Date): string {
   const [y, m, d] = due.split("-").map(Number);

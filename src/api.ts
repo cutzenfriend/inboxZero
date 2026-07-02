@@ -14,7 +14,7 @@ export interface CreateTodoInput {
   leadDays?: number | null;
 }
 
-/** Legt ein Todo an; ohne Fälligkeit landet es sofort im Posteingang (surface = heute). */
+/** Creates a todo; without a due date it surfaces immediately (surface = today). */
 export function createTodo(store: Store, config: Config, input: CreateTodoInput, source: "api" | "email" | "calendar", sourceRef?: string) {
   const today = new Date();
   const surfaceDate = input.due
@@ -50,8 +50,8 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
 
   api.post("/todos", async (c) => {
     const body = await c.req.json<CreateTodoInput>().catch(() => null);
-    if (!body?.title?.trim()) return c.json({ error: "title fehlt" }, 400);
-    if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due muss YYYY-MM-DD sein" }, 400);
+    if (!body?.title?.trim()) return c.json({ error: "title missing" }, 400);
+    if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
     const todo = createTodo(store, config, { ...body, title: body.title.trim() }, "api");
     return c.json(todo, 201);
   });
@@ -60,24 +60,24 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const body = await c.req
       .json<{ text?: string; image?: string; due?: string; leadDays?: number }>()
       .catch(() => null);
-    if (!body || (!body.text?.trim() && !body.image)) return c.json({ error: "text oder image fehlt" }, 400);
-    if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due muss YYYY-MM-DD sein" }, 400);
+    if (!body || (!body.text?.trim() && !body.image)) return c.json({ error: "text or image missing" }, 400);
+    if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
 
-    // Data-URL-Präfix (data:image/png;base64,…) tolerieren
+    // tolerate data URL prefix (data:image/png;base64,…)
     const image = body.image ? body.image.replace(/^data:image\/\w+;base64,/, "") : null;
 
     let structured;
     try {
       structured = await llm.structureTodo(body.text?.trim(), image);
     } catch (err) {
-      return c.json({ error: `LLM-Strukturierung fehlgeschlagen: ${err instanceof Error ? err.message : err}` }, 502);
+      return c.json({ error: `LLM structuring failed: ${err instanceof Error ? err.message : err}` }, 502);
     }
 
     const todo = createTodo(store, config, {
       title: structured.title,
       notes: structured.notes,
       url: structured.url,
-      due: body.due ?? structured.due, // explizites Datum überschreibt das LLM
+      due: body.due ?? structured.due, // an explicit date overrides the LLM
       leadDays: body.leadDays ?? structured.leadDays,
     }, "api");
     return c.json(todo, 201);
@@ -86,11 +86,11 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
   api.patch("/todos/:id", async (c) => {
     const id = Number(c.req.param("id"));
     const body = await c.req.json<CreateTodoInput & { status?: "scheduled" | "cancelled" }>().catch(() => null);
-    if (!body) return c.json({ error: "ungültiger Body" }, 400);
-    if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due muss YYYY-MM-DD sein" }, 400);
+    if (!body) return c.json({ error: "invalid body" }, 400);
+    if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
 
     const existing = store.getTodo(id);
-    if (!existing) return c.json({ error: "nicht gefunden" }, 404);
+    if (!existing) return c.json({ error: "not found" }, 404);
 
     const due = body.due !== undefined ? body.due : existing.due_date;
     const leadDays = body.leadDays !== undefined ? body.leadDays : existing.lead_days;
@@ -112,7 +112,7 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
 
   api.delete("/todos/:id", (c) => {
     const ok = store.deleteTodo(Number(c.req.param("id")));
-    return ok ? c.body(null, 204) : c.json({ error: "nicht gefunden" }, 404);
+    return ok ? c.body(null, 204) : c.json({ error: "not found" }, 404);
   });
 
   return api;

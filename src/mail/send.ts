@@ -11,15 +11,15 @@ export function createMailer(config: Config) {
   });
 
   return {
-    /** Schickt ein fälliges Todo als Mail an den eigenen Posteingang. */
+    /** Sends a due todo as a mail into the user's own inbox. */
     async sendTodo(todo: Todo): Promise<void> {
-      const dueText = todo.due_date ? ` (fällig ${formatGerman(todo.due_date)})` : "";
+      const dueText = todo.due_date ? ` (due ${todo.due_date})` : "";
       const lines = [
         todo.notes ?? "",
         todo.url ?? "",
         "",
-        `Quelle: ${todo.source}`,
-        config.baseUrl ? `Verwalten: ${config.baseUrl}/` : "",
+        `Source: ${todo.source}`,
+        config.baseUrl ? `Manage: ${config.baseUrl}/` : "",
       ].filter(Boolean);
 
       await transport.sendMail({
@@ -32,8 +32,3 @@ export function createMailer(config: Config) {
   };
 }
 export type Mailer = ReturnType<typeof createMailer>;
-
-function formatGerman(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-}
