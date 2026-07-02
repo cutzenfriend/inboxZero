@@ -37,6 +37,11 @@ export async function syncCalendar(store: Store, config: Config): Promise<void> 
     if (!start) continue;
 
     const due = toIsoDate(start);
+    // timed (non-all-day) events carry their start time over to the todo
+    const time =
+      item.datetype === "date-time"
+        ? `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`
+        : null;
     const leadMatch = LEAD_TOKEN.exec(summary);
     const leadDays = leadMatch ? Number(leadMatch[1]) : null;
     const title = summary
@@ -51,11 +56,15 @@ export async function syncCalendar(store: Store, config: Config): Promise<void> 
 
     const existing = store.findBySourceRef("calendar", ref);
     if (existing) {
-      if (existing.status === "scheduled" && (existing.title !== title || existing.lead_days !== leadDays)) {
+      if (
+        existing.status === "scheduled" &&
+        (existing.title !== title || existing.lead_days !== leadDays || existing.surface_time !== time)
+      ) {
         store.updateTodo(existing.id, {
           title,
           lead_days: leadDays,
           surface_date: computeSurfaceDate(due, leadDays ?? config.defaultLeadDays, now),
+          surface_time: time,
         });
         console.log(`[calendar] updated: #${existing.id} "${title}"`);
       }
@@ -65,7 +74,7 @@ export async function syncCalendar(store: Store, config: Config): Promise<void> 
     // do not re-create past one-off events
     if (due < toIsoDate(now)) continue;
 
-    const todo = createTodo(store, config, { title, due, leadDays, notes: item.description ? String(item.description) : null }, "calendar", ref);
+    const todo = createTodo(store, config, { title, due, time, leadDays, notes: item.description ? String(item.description) : null }, "calendar", ref);
     console.log(`[calendar] captured: #${todo.id} "${todo.title}" (inbox on ${todo.surface_date})`);
   }
 

@@ -1,7 +1,7 @@
 /**
  * Deterministic fast path for the subject grammar:
- *   @<DD.MM.[YYYY]> [<N>d] <title>   e.g. "@01.03. 5d file tax return"
- *   @<YYYY-MM-DD>   [<N>d] <title>   e.g. "@2026-03-01 file tax return"
+ *   @<DD.MM.[YYYY]> [<HH:MM>] [<N>d] <title>   e.g. "@01.03. 14:30 5d file tax return"
+ *   @<YYYY-MM-DD>   [<HH:MM>] [<N>d] <title>   e.g. "@2026-03-01 file tax return"
  * If the grammar does not match, parseSubject returns null → the caller uses the LLM.
  */
 
@@ -9,12 +9,15 @@ export interface ParsedTodo {
   title: string;
   /** due date as YYYY-MM-DD */
   due: string;
+  /** time of day as HH:MM; null = use the SURFACE_TIME default */
+  time: string | null;
   /** lead days; null = use default */
   leadDays: number | null;
 }
 
 const GERMAN_DATE = /@(\d{1,2})\.(\d{1,2})\.(\d{4})?/;
 const ISO_DATE = /@(\d{4})-(\d{2})-(\d{2})/;
+const TIME = /^\s*([01]?\d|2[0-3]):([0-5]\d)\b/;
 const LEAD = /^\s*(\d{1,3})d\b/;
 
 function pad(n: number): string {
@@ -60,23 +63,27 @@ export function parseSubject(subject: string, today: Date): ParsedTodo | null {
 
   if (!isValidDate(year, month, day)) return null;
 
-  const rest = subject.slice(0, match.index) + subject.slice(match.index + match[0].length);
-  const afterDate = subject.slice(match.index + match[0].length);
-  const leadMatch = LEAD.exec(afterDate);
+  const before = subject.slice(0, match.index);
+  let after = subject.slice(match.index + match[0].length);
 
-  let title: string;
-  let leadDays: number | null = null;
-  if (leadMatch) {
-    leadDays = Number(leadMatch[1]);
-    title = (subject.slice(0, match.index) + afterDate.slice(leadMatch[0].length)).trim();
-  } else {
-    title = rest.trim();
+  let time: string | null = null;
+  const timeMatch = TIME.exec(after);
+  if (timeMatch) {
+    time = `${pad(Number(timeMatch[1]))}:${timeMatch[2]}`;
+    after = after.slice(timeMatch[0].length);
   }
 
-  title = title.replace(/\s+/g, " ");
+  let leadDays: number | null = null;
+  const leadMatch = LEAD.exec(after);
+  if (leadMatch) {
+    leadDays = Number(leadMatch[1]);
+    after = after.slice(leadMatch[0].length);
+  }
+
+  const title = (before + after).replace(/\s+/g, " ").trim();
   if (!title) return null;
 
-  return { title, due: `${year}-${pad(month)}-${pad(day)}`, leadDays };
+  return { title, due: `${year}-${pad(month)}-${pad(day)}`, time, leadDays };
 }
 
 /**

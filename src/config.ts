@@ -28,6 +28,8 @@ export const config = {
   llmLanguage: optional("LLM_LANGUAGE", "English"),
 
   defaultLeadDays: Number(optional("DEFAULT_LEAD_DAYS", "2")),
+  /** Time of day (HH:MM) at which todo mails land when the todo has no own time */
+  surfaceTime: optional("SURFACE_TIME", "07:00"),
   /** Public base URL of this service, used for links in surfaced mails */
   baseUrl: optional("BASE_URL", "").replace(/\/$/, ""),
 };

@@ -4,8 +4,10 @@ import { toIsoDate } from "./parse.js";
 export interface StructuredTodo {
   title: string;
   due: string | null;
+  time: string | null;
   leadDays: number | null;
   notes: string | null;
+  context: string | null;
   url: string | null;
 }
 
@@ -14,13 +16,16 @@ const RESPONSE_SCHEMA = {
   properties: {
     title: { type: "string" },
     due: { type: ["string", "null"], description: "YYYY-MM-DD or null" },
+    time: { type: ["string", "null"], description: "HH:MM (24h) or null" },
     leadDays: { type: ["integer", "null"] },
     notes: { type: ["string", "null"] },
+    context: { type: ["string", "null"], description: "2-3 helpful sentences or null" },
   },
-  required: ["title", "due", "leadDays", "notes"],
+  required: ["title", "due", "time", "leadDays", "notes", "context"],
 } as const;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 const URL_PATTERN = /https?:\/\/\S+/;
 
 export interface ModelInfo {
@@ -107,7 +112,8 @@ export class Llm {
           { role: "user", content: userContent, ...(imageBase64 ? { images: [imageBase64] } : {}) },
         ],
       }),
-      signal: AbortSignal.timeout(120_000),
+      // generous timeout: a cold Ollama may need to load the model first
+      signal: AbortSignal.timeout(180_000),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -127,6 +133,8 @@ export class Llm {
     if (!parsed.title?.trim()) throw new Error("Ollama returned no title");
 
     const due = typeof parsed.due === "string" && ISO_DATE.test(parsed.due) ? parsed.due : null;
+    const timeMatch = typeof parsed.time === "string" ? TIME_RE.exec(parsed.time.trim()) : null;
+    const time = timeMatch ? `${timeMatch[1]!.padStart(2, "0")}:${timeMatch[2]}` : null;
     const leadDays =
       typeof parsed.leadDays === "number" && Number.isInteger(parsed.leadDays) && parsed.leadDays >= 0
         ? parsed.leadDays
@@ -135,8 +143,10 @@ export class Llm {
     return {
       title: parsed.title.trim(),
       due,
+      time,
       leadDays,
       notes: typeof parsed.notes === "string" && parsed.notes.trim() ? parsed.notes.trim() : null,
+      context: typeof parsed.context === "string" && parsed.context.trim() ? parsed.context.trim() : null,
       // URLs are taken deterministically from the original text, not from the LLM
       url: text ? URL_PATTERN.exec(text)?.[0] ?? null : null,
     };

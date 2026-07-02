@@ -32,7 +32,7 @@ function guarded(name: string, fn: () => Promise<void>): () => void {
   };
 }
 
-const runSurface = guarded("surface", () => surfaceDueTodos(store, mailer));
+const runSurface = guarded("surface", () => surfaceDueTodos(store, config, mailer));
 const runImap = guarded("imap", () => captureFromImap(store, config, llm));
 const runCalendar = guarded("calendar", () => syncCalendar(store, config));
 

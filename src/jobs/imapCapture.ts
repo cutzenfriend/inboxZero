@@ -5,6 +5,7 @@ import type { Store } from "../db.js";
 import type { Llm } from "../llm.js";
 import { createTodo } from "../api.js";
 import { parseSubject } from "../parse.js";
+import { saveImage } from "../attachments.js";
 
 const CAPTURED_FOLDER = "inboxZero/captured";
 const LOOKBACK_DAYS = 14;
@@ -70,25 +71,37 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
         const parsed = await simpleParser(mail.source);
         const bodyText = (parsed.text ?? "").trim();
 
+        // first image attachment (e.g. a shared screenshot) is analyzed and later re-attached to the surfaced mail
+        const imageAttachment = parsed.attachments.find((a) => a.contentType?.startsWith("image/"));
+        const imageBase64 = imageAttachment ? imageAttachment.content.toString("base64") : null;
+
         let input;
         if (grammar) {
           input = {
             title: grammar.title,
             due: grammar.due,
+            time: grammar.time,
             leadDays: grammar.leadDays,
             notes: bodyText ? bodyText.slice(0, 1000) : null,
             url: /https?:\/\/\S+/.exec(bodyText)?.[0] ?? null,
+            imagePath: imageBase64 ? saveImage(config.dataDir, imageBase64) : null,
           };
         } else {
           try {
-            // first image attachment (e.g. a shared screenshot) goes to the multimodal model
-            const imageAttachment = parsed.attachments.find((a) => a.contentType?.startsWith("image/"));
-            const imageBase64 = imageAttachment ? imageAttachment.content.toString("base64") : null;
             const structured = await llm.structureTodo(
               [mail.subject, bodyText].filter(Boolean).join("\n\n") || null,
               imageBase64,
             );
-            input = { title: structured.title, due: structured.due, leadDays: structured.leadDays, notes: structured.notes, url: structured.url };
+            input = {
+              title: structured.title,
+              due: structured.due,
+              time: structured.time,
+              leadDays: structured.leadDays,
+              notes: structured.notes,
+              context: structured.context,
+              url: structured.url,
+              imagePath: imageBase64 ? saveImage(config.dataDir, imageBase64) : null,
+            };
           } catch (err) {
             console.error(`[imap] LLM error for "${mail.subject}" — mail stays in inbox:`, err);
             continue;

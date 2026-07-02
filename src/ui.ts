@@ -4,7 +4,8 @@ import type { HtmlEscapedString } from "hono/utils/html";
 import type { Store, Todo } from "./db.js";
 import type { Config } from "./config.js";
 import type { Llm, ModelInfo } from "./llm.js";
-import { createTodo } from "./api.js";
+import { createTodo, deleteTodoWithAttachment } from "./api.js";
+import { saveImage } from "./attachments.js";
 
 const STYLE = `
   :root { color-scheme: light dark; --accent: #2563eb; --muted: #6b7280; --border: #d1d5db; }
@@ -53,7 +54,7 @@ function todoRow(t: Todo) {
       ${t.url ? html`<br /><a class="muted" href="${t.url}">${t.url}</a>` : ""}
       ${t.notes ? html`<br /><span class="muted">${t.notes}</span>` : ""}
     </td>
-    <td class="muted">due ${t.due_date ?? "—"}<br />📥 ${t.surface_date}</td>
+    <td class="muted">due ${t.due_date ?? "—"}<br />📥 ${t.surface_date}${t.surface_time ? " " + t.surface_time : ""}</td>
     <td class="muted">${t.status === "scheduled" ? t.source : t.status}</td>
     <td>
       <form class="inline" method="post" action="/todos/${t.id}/delete" onsubmit="return confirm('Delete?')">
@@ -114,7 +115,7 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
   });
 
   ui.post("/todos/:id/delete", (c) => {
-    store.deleteTodo(Number(c.req.param("id")));
+    deleteTodoWithAttachment(store, config, Number(c.req.param("id")));
     return c.redirect("/");
   });
 
@@ -124,6 +125,7 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const form = await c.req.formData();
     const text = String(form.get("text") ?? "").trim();
     const due = String(form.get("due") ?? "").trim() || null;
+    const time = String(form.get("time") ?? "").trim() || null;
     const leadRaw = String(form.get("leadDays") ?? "").trim();
     const leadDays = leadRaw ? Number(leadRaw) : null;
 
@@ -140,11 +142,14 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
         title: structured.title,
         notes: structured.notes,
         url: structured.url,
+        context: structured.context,
         due: due ?? structured.due,
+        time: time ?? structured.time,
         leadDays: leadDays ?? structured.leadDays,
+        imagePath: imageBase64 ? saveImage(config.dataDir, imageBase64) : null,
       }, "api");
       return c.html(
-        page("New", newForm(null, `Captured: "${todo.title}" — will land in your inbox on ${todo.surface_date}.`)),
+        page("New", newForm(null, `Captured: "${todo.title}" — will land in your inbox on ${todo.surface_date}${todo.surface_time ? ` at ${todo.surface_time}` : ""}.`)),
       );
     } catch (err) {
       return c.html(page("New", newForm(`Ollama error: ${err instanceof Error ? err.message : err}`, null)));
@@ -190,6 +195,8 @@ function newForm(error: string | null, ok: string | null) {
       <input type="file" name="image" accept="image/*" />
       <label>Override due date (optional)</label>
       <input type="date" name="due" />
+      <label>Time of day the mail should arrive (optional)</label>
+      <input type="time" name="time" />
       <label>Lead days (optional)</label>
       <input type="number" name="leadDays" min="0" placeholder="default: from env" />
       <button type="submit">Capture</button>

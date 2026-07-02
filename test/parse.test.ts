@@ -9,6 +9,7 @@ describe("parseSubject", () => {
     expect(parseSubject("@01.03.2027 File tax return", today)).toEqual({
       title: "File tax return",
       due: "2027-03-01",
+      time: null,
       leadDays: null,
     });
   });
@@ -17,6 +18,7 @@ describe("parseSubject", () => {
     expect(parseSubject("@24.12. Buy presents", today)).toEqual({
       title: "Buy presents",
       due: "2026-12-24",
+      time: null,
       leadDays: null,
     });
   });
@@ -33,7 +35,26 @@ describe("parseSubject", () => {
     expect(parseSubject("@2026-09-15 Change tires", today)).toEqual({
       title: "Change tires",
       due: "2026-09-15",
+      time: null,
       leadDays: null,
+    });
+  });
+
+  it("parses a time after the date", () => {
+    expect(parseSubject("@01.03.2027 14:30 Doctor appointment", today)).toEqual({
+      title: "Doctor appointment",
+      due: "2027-03-01",
+      time: "14:30",
+      leadDays: null,
+    });
+  });
+
+  it("parses time and lead days together", () => {
+    expect(parseSubject("@01.03.2027 9:05 3d Doctor appointment", today)).toEqual({
+      title: "Doctor appointment",
+      due: "2027-03-01",
+      time: "09:05",
+      leadDays: 3,
     });
   });
 
@@ -41,6 +62,7 @@ describe("parseSubject", () => {
     expect(parseSubject("@01.03.2027 5d File tax return", today)).toEqual({
       title: "File tax return",
       due: "2027-03-01",
+      time: null,
       leadDays: 5,
     });
   });
@@ -49,6 +71,7 @@ describe("parseSubject", () => {
     expect(parseSubject("File tax @01.03.2027 return", today)).toEqual({
       title: "File tax return",
       due: "2027-03-01",
+      time: null,
       leadDays: null,
     });
   });

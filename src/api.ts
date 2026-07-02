@@ -3,15 +3,20 @@ import type { Store } from "./db.js";
 import type { Config } from "./config.js";
 import type { Llm } from "./llm.js";
 import { computeSurfaceDate, toIsoDate } from "./parse.js";
+import { deleteImage, saveImage } from "./attachments.js";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
 export interface CreateTodoInput {
   title: string;
   notes?: string | null;
   url?: string | null;
+  context?: string | null;
   due?: string | null;
+  time?: string | null;
   leadDays?: number | null;
+  imagePath?: string | null;
 }
 
 /** Creates a todo; without a due date it surfaces immediately (surface = today). */
@@ -24,12 +29,22 @@ export function createTodo(store: Store, config: Config, input: CreateTodoInput,
     title: input.title,
     notes: input.notes ?? null,
     url: input.url ?? null,
+    context: input.context ?? null,
     dueDate: input.due ?? null,
     leadDays: input.leadDays ?? null,
     surfaceDate,
+    surfaceTime: input.time ?? null,
+    imagePath: input.imagePath ?? null,
     source,
     sourceRef: sourceRef ?? null,
   });
+}
+
+/** Deletes a todo including its stored image attachment, if any. */
+export function deleteTodoWithAttachment(store: Store, config: Config, id: number): boolean {
+  const todo = store.getTodo(id);
+  if (todo?.image_path) deleteImage(config.dataDir, todo.image_path);
+  return store.deleteTodo(id);
 }
 
 export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
@@ -52,16 +67,18 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const body = await c.req.json<CreateTodoInput>().catch(() => null);
     if (!body?.title?.trim()) return c.json({ error: "title missing" }, 400);
     if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
-    const todo = createTodo(store, config, { ...body, title: body.title.trim() }, "api");
+    if (body.time && !TIME_RE.test(body.time)) return c.json({ error: "time must be HH:MM" }, 400);
+    const todo = createTodo(store, config, { ...body, title: body.title.trim(), imagePath: null }, "api");
     return c.json(todo, 201);
   });
 
   api.post("/todos/freeform", async (c) => {
     const body = await c.req
-      .json<{ text?: string; image?: string; due?: string; leadDays?: number }>()
+      .json<{ text?: string; image?: string; due?: string; time?: string; leadDays?: number }>()
       .catch(() => null);
     if (!body || (!body.text?.trim() && !body.image)) return c.json({ error: "text or image missing" }, 400);
     if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
+    if (body.time && !TIME_RE.test(body.time)) return c.json({ error: "time must be HH:MM" }, 400);
 
     // tolerate data URL prefix (data:image/png;base64,…)
     const image = body.image ? body.image.replace(/^data:image\/\w+;base64,/, "").replace(/\s/g, "") : null;
@@ -83,8 +100,11 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
       title: structured.title,
       notes: structured.notes,
       url: structured.url,
+      context: structured.context,
       due: body.due ?? structured.due, // an explicit date overrides the LLM
+      time: body.time ?? structured.time,
       leadDays: body.leadDays ?? structured.leadDays,
+      imagePath: image ? saveImage(config.dataDir, image) : null,
     }, "api");
     return c.json(todo, 201);
   });
@@ -94,6 +114,7 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const body = await c.req.json<CreateTodoInput & { status?: "scheduled" | "cancelled" }>().catch(() => null);
     if (!body) return c.json({ error: "invalid body" }, 400);
     if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due must be YYYY-MM-DD" }, 400);
+    if (body.time && !TIME_RE.test(body.time)) return c.json({ error: "time must be HH:MM" }, 400);
 
     const existing = store.getTodo(id);
     if (!existing) return c.json({ error: "not found" }, 404);
@@ -108,16 +129,18 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
       title: body.title?.trim() || existing.title,
       notes: body.notes !== undefined ? body.notes : existing.notes,
       url: body.url !== undefined ? body.url : existing.url,
+      context: body.context !== undefined ? body.context : existing.context,
       due_date: due,
       lead_days: leadDays,
       surface_date: surfaceDate,
+      surface_time: body.time !== undefined ? body.time : existing.surface_time,
       status: body.status ?? existing.status,
     });
     return c.json(updated);
   });
 
   api.delete("/todos/:id", (c) => {
-    const ok = store.deleteTodo(Number(c.req.param("id")));
+    const ok = deleteTodoWithAttachment(store, config, Number(c.req.param("id")));
     return ok ? c.body(null, 204) : c.json({ error: "not found" }, 404);
   });
 
