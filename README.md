@@ -1,5 +1,7 @@
 # inboxZero
 
+[![Docker Hub](https://img.shields.io/docker/v/cutzenfriend/inboxzero?label=docker%20hub)](https://hub.docker.com/r/cutzenfriend/inboxzero)
+
 Use your Gmail inbox as your todo list: todos land in your inbox **at the right moment** (due date minus lead time) as emails and stay there until you deal with them. For mails that are already in your inbox, Gmail's built-in snooze remains the tool of choice — this service fills the gap for tasks that do **not** arrive by mail.
 
 ## How it works
@@ -32,9 +34,14 @@ Use your Gmail inbox as your todo list: todos land in your inbox **at the right 
          ICS_URL: https://calendar.google.com/calendar/ical/…/basic.ics
    ```
 
-4. Run: `docker compose up -d --build` — or locally with `npm install && npm run dev` (set the variables in your environment).
+4. Run: `docker compose up -d` — this pulls the prebuilt image [`cutzenfriend/inboxzero`](https://hub.docker.com/r/cutzenfriend/inboxzero) from Docker Hub.
 
-All variables and their defaults are listed in [docker-compose.yml](docker-compose.yml).
+All variables and their defaults are listed in [docker-compose.yml](docker-compose.yml). The SQLite database is stored in a `./data` bind mount next to the compose file — back up or migrate by copying that directory.
+
+### Building from source
+
+- Local dev: `npm install && npm run dev` (set the variables in your environment).
+- Docker: `docker compose build` tags a local build as `cutzenfriend/inboxzero`, `docker compose push` publishes it to Docker Hub.
 
 ## API
 
@@ -76,6 +83,6 @@ Open `https://<your-host>/new` in Safari → Share → "Add to Home Screen".
 
 ## Operations
 
-- SQLite lives in the `./data` volume.
+- SQLite lives in the `./data` bind mount.
 - Logs: `docker compose logs -f` — shows captures (`[imap]`, `[calendar]`) and sends (`[surface]`).
 - If LLM structuring fails (Ollama down), the capture mail stays in your inbox and is retried on the next run.

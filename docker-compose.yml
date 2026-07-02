@@ -2,6 +2,8 @@
 # never commit credentials to this file.
 services:
   inboxzero:
+    image: cutzenfriend/inboxzero:latest
+    # `docker compose build` tags a local build as this image; `docker compose push` publishes it
     build: .
     container_name: inboxzero
     restart: unless-stopped
@@ -37,4 +39,5 @@ services:
       # Public URL of this service (used for links in surfaced mails), optional
       BASE_URL: ""
     volumes:
+      # bind mount — the SQLite database lives in ./data next to this file
       - ./data:/app/data
