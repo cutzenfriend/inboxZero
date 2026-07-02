@@ -1,7 +1,6 @@
 # Env & Secrets
 .env
 .env.*
-docker-compose.override.yml
 
 # Dependencies & Build
 node_modules/

@@ -17,26 +17,10 @@ Use your Gmail inbox as your todo list: todos land in your inbox **at the right 
 
 1. Create a **Google app password** (requires 2FA): <https://myaccount.google.com/apppasswords>.
 2. Grab your **iCal URL** (optional): Google Calendar → Settings → select calendar → "Secret address in iCal format".
-3. Configure via a git-ignored compose override — create `docker-compose.override.yml` next to `docker-compose.yml` with your real values (never commit credentials):
-
-   ```yaml
-   services:
-     inboxzero:
-       environment:
-         GMAIL_USER: your.name@gmail.com
-         GMAIL_APP_PASSWORD: your-app-password
-         CAPTURE_ADDRESS: your.name+todo@gmail.com
-         API_TOKEN: long-random-token
-         UI_USER: you
-         UI_PASSWORD: strong-password
-         OLLAMA_URL: http://your-ollama-host:11434
-         LLM_LANGUAGE: English   # language the LLM writes todos in
-         ICS_URL: https://calendar.google.com/calendar/ical/…/basic.ics
-   ```
-
+3. Grab [docker-compose.yml](docker-compose.yml) and fill in your values in the `environment:` section — Gmail credentials, capture address, API token, UI login, Ollama URL, todo language, iCal URL.
 4. Run: `docker compose up -d` — this pulls the prebuilt image [`cutzenfriend/inboxzero`](https://hub.docker.com/r/cutzenfriend/inboxzero) from Docker Hub.
 
-All variables and their defaults are listed in [docker-compose.yml](docker-compose.yml). The SQLite database is stored in a `./data` bind mount next to the compose file — back up or migrate by copying that directory.
+The SQLite database is stored in a `./data` bind mount next to the compose file — back up or migrate by copying that directory.
 
 ### Building from source
 

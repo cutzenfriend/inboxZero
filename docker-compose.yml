@@ -1,5 +1,5 @@
-# Copy real values into a git-ignored docker-compose.override.yml (see README) —
-# never commit credentials to this file.
+# Fill in your values below. If you work from a git checkout, take care
+# not to commit real credentials.
 services:
   inboxzero:
     image: cutzenfriend/inboxzero:latest
