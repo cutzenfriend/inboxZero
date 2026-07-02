@@ -3,7 +3,7 @@ import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 import type { Store, Todo } from "./db.js";
 import type { Config } from "./config.js";
-import type { Llm } from "./llm.js";
+import type { Llm, ModelInfo } from "./llm.js";
 import { createTodo } from "./api.js";
 
 const STYLE = `
@@ -132,10 +132,16 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const due = String(form.get("due") ?? "").trim() || null;
     const leadRaw = String(form.get("leadDays") ?? "").trim();
     const leadDays = leadRaw ? Number(leadRaw) : null;
-    if (!text) return c.html(page("Neu", newForm("Bitte Text eingeben.", null)));
+
+    const imageFile = form.get("image");
+    let imageBase64: string | null = null;
+    if (imageFile instanceof File && imageFile.size > 0) {
+      imageBase64 = Buffer.from(await imageFile.arrayBuffer()).toString("base64");
+    }
+    if (!text && !imageBase64) return c.html(page("Neu", newForm("Bitte Text eingeben oder Bild wählen.", null)));
 
     try {
-      const structured = await llm.structureTodo(text);
+      const structured = await llm.structureTodo(text || null, imageBase64);
       const todo = createTodo(store, config, {
         title: structured.title,
         notes: structured.notes,
@@ -152,7 +158,7 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
   });
 
   ui.get("/settings", async (c) => {
-    let models: string[] = [];
+    let models: ModelInfo[] = [];
     let modelError: string | null = null;
     try {
       models = await llm.listModels();
@@ -166,7 +172,7 @@ export function uiRoutes(store: Store, config: Config, llm: Llm): Hono {
     const form = await c.req.formData();
     store.setSetting("llm_system_prompt", String(form.get("systemPrompt") ?? ""));
     store.setSetting("llm_model", String(form.get("model") ?? ""));
-    let models: string[] = [];
+    let models: ModelInfo[] = [];
     try {
       models = await llm.listModels();
     } catch {
@@ -182,9 +188,11 @@ function newForm(error: string | null, ok: string | null) {
   return html`
     ${error ? html`<p class="error">${error}</p>` : ""}
     ${ok ? html`<p class="ok">${ok}</p>` : ""}
-    <form method="post" action="/new">
+    <form method="post" action="/new" enctype="multipart/form-data">
       <label>Was ist zu tun? (Freitext — Datum & Details erkennt das LLM)</label>
-      <textarea name="text" rows="4" placeholder="z.B. Reifen wechseln bis Ende Oktober, erinner mich 5 Tage vorher" required></textarea>
+      <textarea name="text" rows="4" placeholder="z.B. Reifen wechseln bis Ende Oktober, erinner mich 5 Tage vorher"></textarea>
+      <label>… oder Bild (Screenshot etc. — wird nur ausgewertet, nicht gespeichert)</label>
+      <input type="file" name="image" accept="image/*" />
       <label>Fälligkeit überschreiben (optional)</label>
       <input type="date" name="due" />
       <label>Vorlauftage (optional)</label>
@@ -194,18 +202,20 @@ function newForm(error: string | null, ok: string | null) {
   `;
 }
 
-function settingsForm(store: Store, models: string[], modelError: string | null, saved: boolean) {
+function settingsForm(store: Store, models: ModelInfo[], modelError: string | null, saved: boolean) {
   const currentModel = store.getSetting("llm_model");
   const prompt = store.getSetting("llm_system_prompt");
   return html`
     ${saved ? html`<p class="ok">Gespeichert.</p>` : ""}
     ${modelError ? html`<p class="error">Ollama nicht erreichbar: ${modelError}</p>` : ""}
     <form method="post" action="/settings">
-      <label>Ollama-Modell</label>
+      <label>Ollama-Modell (👁 = kann Bilder; bei Bild-Erfassung wird sonst automatisch ausgewichen)</label>
       <select name="model">
         <option value="">(erstes verfügbares Modell)</option>
-        ${models.map((m) => html`<option value="${m}" ${m === currentModel ? "selected" : ""}>${m}</option>`)}
-        ${currentModel && !models.includes(currentModel)
+        ${models.map(
+          (m) => html`<option value="${m.name}" ${m.name === currentModel ? "selected" : ""}>${m.name}${m.vision ? " 👁" : ""}</option>`,
+        )}
+        ${currentModel && !models.some((m) => m.name === currentModel)
           ? html`<option value="${currentModel}" selected>${currentModel} (nicht in Liste)</option>`
           : ""}
       </select>

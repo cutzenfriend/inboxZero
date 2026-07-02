@@ -57,13 +57,18 @@ export function apiRoutes(store: Store, config: Config, llm: Llm): Hono {
   });
 
   api.post("/todos/freeform", async (c) => {
-    const body = await c.req.json<{ text?: string; due?: string; leadDays?: number }>().catch(() => null);
-    if (!body?.text?.trim()) return c.json({ error: "text fehlt" }, 400);
+    const body = await c.req
+      .json<{ text?: string; image?: string; due?: string; leadDays?: number }>()
+      .catch(() => null);
+    if (!body || (!body.text?.trim() && !body.image)) return c.json({ error: "text oder image fehlt" }, 400);
     if (body.due && !ISO_DATE.test(body.due)) return c.json({ error: "due muss YYYY-MM-DD sein" }, 400);
+
+    // Data-URL-Präfix (data:image/png;base64,…) tolerieren
+    const image = body.image ? body.image.replace(/^data:image\/\w+;base64,/, "") : null;
 
     let structured;
     try {
-      structured = await llm.structureTodo(body.text.trim());
+      structured = await llm.structureTodo(body.text?.trim(), image);
     } catch (err) {
       return c.json({ error: `LLM-Strukturierung fehlgeschlagen: ${err instanceof Error ? err.message : err}` }, 502);
     }

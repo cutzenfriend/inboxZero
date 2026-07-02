@@ -78,7 +78,13 @@ export async function captureFromImap(store: Store, config: Config, llm: Llm): P
           };
         } else {
           try {
-            const structured = await llm.structureTodo([mail.subject, bodyText].filter(Boolean).join("\n\n"));
+            // Erster Bild-Anhang (z.B. geteilter Screenshot) geht mit ans multimodale Modell
+            const imageAttachment = parsed.attachments.find((a) => a.contentType?.startsWith("image/"));
+            const imageBase64 = imageAttachment ? imageAttachment.content.toString("base64") : null;
+            const structured = await llm.structureTodo(
+              [mail.subject, bodyText].filter(Boolean).join("\n\n") || null,
+              imageBase64,
+            );
             input = { title: structured.title, due: structured.due, leadDays: structured.leadDays, notes: structured.notes, url: structured.url };
           } catch (err) {
             console.error(`[imap] LLM-Fehler für „${mail.subject}" — Mail bleibt im Posteingang:`, err);

@@ -24,7 +24,7 @@ Auth: `Authorization: Bearer $API_TOKEN`
 
 | Route | Beschreibung |
 | --- | --- |
-| `POST /api/todos/freeform` | `{text, due?, leadDays?}` — Ollama strukturiert den Text; explizites `due` überschreibt |
+| `POST /api/todos/freeform` | `{text?, image?, due?, leadDays?}` — Ollama strukturiert Text und/oder Bild (base64, z.B. Chat-Screenshot); explizites `due` überschreibt. Bilder werden nur ausgewertet, nicht gespeichert |
 | `POST /api/todos` | `{title, due?, leadDays?, notes?, url?}` — strukturiert, ohne LLM |
 | `GET /api/todos?status=scheduled` | Liste |
 | `PATCH /api/todos/:id` | Felder ändern (`status: "cancelled"` zum Stornieren) |
@@ -36,19 +36,21 @@ Auth: `Authorization: Bearer $API_TOKEN`
 
 In der Kurzbefehle-App einen neuen Kurzbefehl anlegen:
 
-1. **Kurzbefehl-Details** → „Im Share Sheet anzeigen" aktivieren, Eingabetyp: Text, URLs, Safari-Webseiten.
+1. **Kurzbefehl-Details** → „Im Share Sheet anzeigen" aktivieren, Eingabetyp: Text, URLs, Safari-Webseiten, **Bilder**.
 2. Aktion **„Empfange Eingabe"**: Wenn keine Eingabe → „Nach Text fragen" (so funktioniert er auch vom Homescreen/per Siri mit Diktat).
-3. Aktion **„Nach Eingabe fragen"** (Typ: Datum, Frage: „Fällig am?") — *optional überspringbar: bei Abbruch einfach weiter*. Wer nie manuell datieren will, lässt diesen Schritt weg — das LLM liest Datumsangaben aus dem Text.
-4. Aktion **„Inhalt von URL abrufen"**:
-   - URL: `https://<dein-host>/api/todos/freeform`
-   - Methode: POST, Header: `Authorization: Bearer <API_TOKEN>`
-   - JSON-Body: `text` = Eingabe des Share Sheets (+ ggf. `due` = formatiertes Datum `yyyy-MM-dd` aus Schritt 3)
+3. Aktion **„Nach Eingabe fragen"** (Typ: Datum, Frage: „Fällig am?") — *optional überspringbar: bei Abbruch einfach weiter*. Wer nie manuell datieren will, lässt diesen Schritt weg — das LLM liest Datumsangaben aus Text bzw. Bild.
+4. Aktion **„Wenn"** — Eingabetyp ist Bild:
+   - **Dann:** „Bild skalieren" (Breite 1024, hält die Anfrage klein) → „Base64 codieren" → **„Inhalt von URL abrufen"** mit JSON-Body `image` = Base64-Text (+ ggf. `due`)
+   - **Sonst:** **„Inhalt von URL abrufen"** mit JSON-Body `text` = Eingabe (+ ggf. `due`)
+   - Beide Male: URL `https://<dein-host>/api/todos/freeform`, Methode POST, Header `Authorization: Bearer <API_TOKEN>`
 
-Danach taucht der Kurzbefehl in jedem Share Sheet auf: Link/Text teilen → fertig, null Tipparbeit.
+Danach taucht der Kurzbefehl in jedem Share Sheet auf: Link, Text **oder Screenshot** teilen → fertig, null Tipparbeit. Beispiel: Screenshot der Chat-Nachricht *„bitte kaufe am Freitag 3 Bananen"* → Todo „3 Bananen kaufen", fällig Freitag.
+
+> Bild-Erfassung braucht ein Vision-fähiges Ollama-Modell (z.B. `gemma4`). Ist ein anderes Modell eingestellt, weicht der Service für Bilder automatisch auf ein Vision-Modell aus; im Einstellungs-Dropdown sind sie mit 👁 markiert.
 
 ### Mail-Weg (funktioniert überall, auch Desktop/Outlook)
 
-Mail an `dein.name+todo@…` schicken, Betreff frei. Tipp: die Adresse als Kontakt „✅ Todo" speichern.
+Mail an `dein.name+todo@…` schicken, Betreff frei. Ein angehängtes Bild (z.B. Screenshot) wird ebenfalls ans Vision-Modell gegeben. Tipp: die Adresse als Kontakt „✅ Todo" speichern.
 
 ### PWA
 

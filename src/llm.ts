@@ -23,33 +23,75 @@ const RESPONSE_SCHEMA = {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const URL_PATTERN = /https?:\/\/\S+/;
 
+export interface ModelInfo {
+  name: string;
+  vision: boolean;
+}
+
 export class Llm {
+  private capsCache = new Map<string, string[]>();
+
   constructor(
     private baseUrl: string,
     private store: Store,
   ) {}
 
-  async listModels(): Promise<string[]> {
+  private async capabilities(model: string): Promise<string[]> {
+    const cached = this.capsCache.get(model);
+    if (cached) return cached;
+    const res = await fetch(`${this.baseUrl}/api/show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { capabilities?: string[] };
+    const caps = data.capabilities ?? [];
+    this.capsCache.set(model, caps);
+    return caps;
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
     const res = await fetch(`${this.baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`Ollama /api/tags: HTTP ${res.status}`);
     const data = (await res.json()) as { models?: { name: string }[] };
-    return (data.models ?? []).map((m) => m.name);
+    const names = (data.models ?? []).map((m) => m.name);
+    return Promise.all(
+      names.map(async (name) => ({ name, vision: (await this.capabilities(name)).includes("vision") })),
+    );
   }
 
-  private async resolveModel(): Promise<string> {
+  /** Konfiguriertes Modell; bei Bild-Eingaben automatisch ein Vision-fähiges, falls nötig. */
+  private async resolveModel(needVision: boolean): Promise<string> {
     const configured = this.store.getSetting("llm_model");
-    if (configured) return configured;
+    if (configured && (!needVision || (await this.capabilities(configured)).includes("vision"))) {
+      return configured;
+    }
     const models = await this.listModels();
     if (!models.length) throw new Error("Ollama hat keine Modelle installiert");
-    return models[0]!;
+    if (!needVision) return configured || models[0]!.name;
+
+    const visionModel = models.find((m) => m.vision);
+    if (!visionModel) throw new Error("Kein Vision-fähiges Modell in Ollama installiert (z.B. gemma4)");
+    if (configured) console.log(`[llm] „${configured}" kann keine Bilder — nutze „${visionModel.name}"`);
+    return visionModel.name;
   }
 
-  /** Strukturiert Freitext zu einem Todo. Wirft bei Nichterreichbarkeit/kaputter Antwort. */
-  async structureTodo(text: string): Promise<StructuredTodo> {
-    const model = await this.resolveModel();
+  /**
+   * Strukturiert Freitext und/oder ein Bild (base64, z.B. Chat-Screenshot) zu einem Todo.
+   * Bilder erfordern ein multimodales Modell (z.B. gemma4). Wirft bei Nichterreichbarkeit/kaputter Antwort.
+   */
+  async structureTodo(text?: string | null, imageBase64?: string | null): Promise<StructuredTodo> {
+    if (!text?.trim() && !imageBase64) throw new Error("Weder Text noch Bild übergeben");
+    const model = await this.resolveModel(!!imageBase64);
     const systemPrompt = this.store
       .getSetting("llm_system_prompt")
       .replaceAll("{today}", toIsoDate(new Date()));
+
+    const userContent =
+      text?.trim() ||
+      "Extrahiere die Aufgabe aus dem angehängten Bild (z.B. Screenshot einer Chat-Nachricht oder eines Dokuments).";
 
     const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: "POST",
@@ -61,7 +103,7 @@ export class Llm {
         options: { temperature: 0 },
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: text },
+          { role: "user", content: userContent, ...(imageBase64 ? { images: [imageBase64] } : {}) },
         ],
       }),
       signal: AbortSignal.timeout(120_000),
@@ -92,7 +134,7 @@ export class Llm {
       leadDays,
       notes: typeof parsed.notes === "string" && parsed.notes.trim() ? parsed.notes.trim() : null,
       // URLs übernehmen wir deterministisch aus dem Originaltext, nicht vom LLM
-      url: URL_PATTERN.exec(text)?.[0] ?? null,
+      url: text ? URL_PATTERN.exec(text)?.[0] ?? null : null,
     };
   }
 }

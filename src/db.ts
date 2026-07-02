@@ -31,9 +31,9 @@ export interface NewTodo {
   sourceRef?: string | null;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `Du bist ein Assistent, der Freitext in ein Todo umwandelt.
-Heute ist {today}. Extrahiere aus dem Text:
-- title: kurzer, prägnanter Aufgabentitel (Imperativ, deutsch)
+const DEFAULT_SYSTEM_PROMPT = `Du bist ein Assistent, der Freitext oder Bilder (z.B. Chat-Screenshots) in ein Todo umwandelt.
+Heute ist {today}. Extrahiere aus der Eingabe:
+- title: kurzer, prägnanter Aufgabentitel (Imperativ, deutsch); wichtige Details wie Mengen- oder Ortsangaben gehören mit hinein (z.B. "3 Bananen kaufen")
 - due: Fälligkeitsdatum als YYYY-MM-DD, falls eines genannt oder ableitbar ist ("nächsten Dienstag", "Ende März", "in 2 Wochen"), sonst null
 - leadDays: Vorlauftage, falls genannt ("erinner mich 3 Tage vorher"), sonst null
 - notes: relevante Details/Links aus dem Text, sonst null
